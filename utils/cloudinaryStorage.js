@@ -6,11 +6,12 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const uploadPdfToCloudinary = (base64Data, filename, dutyId) => {
+const uploadPdfToCloudinary = (base64Data, filename, dutyId, mimeType) => {
   const publicId = `duties/${dutyId}/${Date.now()}_${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+  const mime = mimeType || (filename.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
   return new Promise((resolve, reject) => {
     cloudinary.uploader.upload(
-      `data:application/pdf;base64,${base64Data}`,
+      `data:${mime};base64,${base64Data}`,
       {
         resource_type: 'raw',
         public_id: publicId,

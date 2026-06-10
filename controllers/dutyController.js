@@ -231,7 +231,8 @@ exports.updateDuty = async (req, res, next) => {
 
 exports.uploadDutyPdf = async (req, res, next) => {
   try {
-    const { filename, data } = req.body;
+    const { filename, data, mimeType } = req.body;
+    console.log(`[uploadDutyPdf] duty=${req.params.id} filename=${filename} mimeType=${mimeType} dataLen=${data?.length}`);
     if (!data) return res.status(400).json({ message: 'No file data provided' });
     if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET)
       return res.status(500).json({ message: 'PDF storage is not configured on this server. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables.' });
@@ -241,12 +242,12 @@ exports.uploadDutyPdf = async (req, res, next) => {
     const duty = await Duty.findById(req.params.id);
     if (!duty) return res.status(404).json({ message: 'Duty not found' });
 
-    // Delete old file from Cloudinary if exists
     if (duty.pdfAttachment?.storagePath) {
       await deletePdfFromCloudinary(duty.pdfAttachment.storagePath);
     }
 
-    const { url, publicId } = await uploadPdfToCloudinary(data, filename || 'document.pdf', req.params.id);
+    const { url, publicId } = await uploadPdfToCloudinary(data, filename || 'document.pdf', req.params.id, mimeType);
+    console.log(`[uploadDutyPdf] Cloudinary OK url=${url} publicId=${publicId}`);
 
     duty.pdfAttachment = {
       filename: filename || 'document.pdf',
@@ -257,6 +258,7 @@ exports.uploadDutyPdf = async (req, res, next) => {
     await duty.save();
     res.json(duty.toJSON());
   } catch (err) {
+    console.error('[uploadDutyPdf] ERROR', err?.message);
     next(err);
   }
 };
