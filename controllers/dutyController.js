@@ -233,6 +233,8 @@ exports.uploadDutyPdf = async (req, res, next) => {
   try {
     const { filename, data } = req.body;
     if (!data) return res.status(400).json({ message: 'No file data provided' });
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET)
+      return res.status(500).json({ message: 'PDF storage is not configured on this server. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET environment variables.' });
     const MAX_BYTES = 5 * 1024 * 1024;
     if (Math.round(data.length * 0.75) > MAX_BYTES)
       return res.status(400).json({ message: 'File exceeds the 5 MB limit' });
