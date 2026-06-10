@@ -284,6 +284,7 @@ const fetchBuffer = (url) => new Promise((resolve, reject) => {
 exports.getDutyPdf = async (req, res, next) => {
   try {
     const duty = await Duty.findById(req.params.id).select('pdfAttachment');
+    console.log(`[getDutyPdf] id=${req.params.id} found=${!!duty} url="${duty?.pdfAttachment?.url}" storagePath="${duty?.pdfAttachment?.storagePath}"`);
     if (!duty) return res.status(404).json({ message: 'Duty not found' });
     if (!duty.pdfAttachment?.url) return res.status(404).json({ message: 'No PDF attached to this duty' });
 
