@@ -15,6 +15,8 @@ const uploadPdfToCloudinary = (base64Data, filename, dutyId) => {
         resource_type: 'raw',
         public_id: publicId,
         overwrite: true,
+        access_mode: 'public',
+        type: 'upload',
       },
       (error, result) => {
         if (error) return reject(error);
@@ -24,10 +26,18 @@ const uploadPdfToCloudinary = (base64Data, filename, dutyId) => {
   });
 };
 
+const generateSignedPdfUrl = (publicId) =>
+  cloudinary.url(publicId, {
+    resource_type: 'raw',
+    type: 'upload',
+    sign_url: true,
+    secure: true,
+  });
+
 const deletePdfFromCloudinary = async (publicId) => {
   try {
     await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
   } catch (_) {}
 };
 
-module.exports = { uploadPdfToCloudinary, deletePdfFromCloudinary };
+module.exports = { uploadPdfToCloudinary, deletePdfFromCloudinary, generateSignedPdfUrl };

@@ -1,7 +1,9 @@
 const Duty = require('../models/Duty');
 const User = require('../models/User');
 const { sendPushNotification } = require('../utils/fcm');
-const { uploadPdfToCloudinary, deletePdfFromCloudinary } = require('../utils/cloudinaryStorage');
+const { uploadPdfToCloudinary, deletePdfFromCloudinary, generateSignedPdfUrl } = require('../utils/cloudinaryStorage');
+const https = require('https');
+const http = require('http');
 
 exports.createDuty = async (req, res, next) => {
   try {
@@ -213,7 +215,7 @@ exports.updateDuty = async (req, res, next) => {
       'date', 'reportingTime', 'guestArrivalTime', 'officeType',
       'from', 'to', 'airline', 'flightNo', 'pnrNo', 'flightTime', 'airportId', 'airportName',
       'terminalId', 'terminalName', 'arrivalDeparture', 'noOfPassengers',
-      'travellerName', 'travellerDesignation', 'travellerPhone', 'pdfAttachment',
+      'travellerName', 'travellerDesignation', 'travellerPhone', 'airportAuthorityPhone', 'remark',
     ];
     const duty = await Duty.findById(req.params.id);
     if (!duty) return res.status(404).json({ message: 'Duty not found' });
@@ -231,6 +233,9 @@ exports.uploadDutyPdf = async (req, res, next) => {
   try {
     const { filename, data } = req.body;
     if (!data) return res.status(400).json({ message: 'No file data provided' });
+    const MAX_BYTES = 5 * 1024 * 1024;
+    if (Math.round(data.length * 0.75) > MAX_BYTES)
+      return res.status(400).json({ message: 'File exceeds the 5 MB limit' });
     const duty = await Duty.findById(req.params.id);
     if (!duty) return res.status(404).json({ message: 'Duty not found' });
 
@@ -259,7 +264,28 @@ exports.getDutyPdf = async (req, res, next) => {
     const duty = await Duty.findById(req.params.id).select('pdfAttachment');
     if (!duty) return res.status(404).json({ message: 'Duty not found' });
     if (!duty.pdfAttachment?.url) return res.status(404).json({ message: 'No PDF attached to this duty' });
-    res.json({ url: duty.pdfAttachment.url, filename: duty.pdfAttachment.filename });
+
+    const fetchUrl = duty.pdfAttachment.storagePath
+      ? generateSignedPdfUrl(duty.pdfAttachment.storagePath)
+      : duty.pdfAttachment.url;
+
+    const filename = duty.pdfAttachment.filename || 'document.pdf';
+    const protocol = fetchUrl.startsWith('https') ? https : http;
+
+    const buffer = await new Promise((resolve, reject) => {
+      protocol.get(fetchUrl, (cloudRes) => {
+        if (cloudRes.statusCode !== 200) {
+          cloudRes.resume();
+          return reject(new Error(`Storage fetch failed: ${cloudRes.statusCode}`));
+        }
+        const chunks = [];
+        cloudRes.on('data', chunk => chunks.push(chunk));
+        cloudRes.on('end', () => resolve(Buffer.concat(chunks)));
+        cloudRes.on('error', reject);
+      }).on('error', reject);
+    });
+
+    res.json({ base64: buffer.toString('base64'), filename });
   } catch (err) {
     next(err);
   }
