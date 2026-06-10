@@ -40,4 +40,4 @@ const deletePdfFromCloudinary = async (publicId) => {
   } catch (_) {}
 };
 
-module.exports = { uploadPdfToCloudinary, deletePdfFromCloudinary, generateSignedPdfUrl };
+module.exports = { cloudinary, uploadPdfToCloudinary, deletePdfFromCloudinary, generateSignedPdfUrl };

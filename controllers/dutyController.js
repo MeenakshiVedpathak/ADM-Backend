@@ -259,31 +259,46 @@ exports.uploadDutyPdf = async (req, res, next) => {
   }
 };
 
+const fetchBuffer = (url) => new Promise((resolve, reject) => {
+  const protocol = url.startsWith('https') ? https : http;
+  protocol.get(url, (cloudRes) => {
+    if (cloudRes.statusCode >= 300 && cloudRes.statusCode < 400 && cloudRes.headers.location) {
+      cloudRes.resume();
+      return fetchBuffer(cloudRes.headers.location).then(resolve, reject);
+    }
+    if (cloudRes.statusCode !== 200) {
+      cloudRes.resume();
+      return reject(Object.assign(new Error(`Storage fetch failed: ${cloudRes.statusCode}`), { statusCode: cloudRes.statusCode }));
+    }
+    const chunks = [];
+    cloudRes.on('data', chunk => chunks.push(chunk));
+    cloudRes.on('end', () => resolve(Buffer.concat(chunks)));
+    cloudRes.on('error', reject);
+  }).on('error', reject);
+});
+
 exports.getDutyPdf = async (req, res, next) => {
   try {
     const duty = await Duty.findById(req.params.id).select('pdfAttachment');
     if (!duty) return res.status(404).json({ message: 'Duty not found' });
     if (!duty.pdfAttachment?.url) return res.status(404).json({ message: 'No PDF attached to this duty' });
 
-    const fetchUrl = duty.pdfAttachment.storagePath
-      ? generateSignedPdfUrl(duty.pdfAttachment.storagePath)
-      : duty.pdfAttachment.url;
-
     const filename = duty.pdfAttachment.filename || 'document.pdf';
-    const protocol = fetchUrl.startsWith('https') ? https : http;
+    const { cloudinary } = require('../utils/cloudinaryStorage');
 
-    const buffer = await new Promise((resolve, reject) => {
-      protocol.get(fetchUrl, (cloudRes) => {
-        if (cloudRes.statusCode !== 200) {
-          cloudRes.resume();
-          return reject(new Error(`Storage fetch failed: ${cloudRes.statusCode}`));
-        }
-        const chunks = [];
-        cloudRes.on('data', chunk => chunks.push(chunk));
-        cloudRes.on('end', () => resolve(Buffer.concat(chunks)));
-        cloudRes.on('error', reject);
-      }).on('error', reject);
-    });
+    let buffer;
+
+    // Try 1: direct public URL
+    try {
+      buffer = await fetchBuffer(duty.pdfAttachment.url);
+    } catch (e) {
+      if (!duty.pdfAttachment.storagePath) throw e;
+      // Try 2: private_download_url (uses API key + secret — works for authenticated resources)
+      const privateUrl = cloudinary.utils.private_download_url(
+        duty.pdfAttachment.storagePath, '', { resource_type: 'raw' }
+      );
+      buffer = await fetchBuffer(privateUrl);
+    }
 
     res.json({ base64: buffer.toString('base64'), filename });
   } catch (err) {
